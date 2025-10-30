@@ -9,8 +9,7 @@ spring:
             - id: user-service
               uri: ${USER_SERVICE_URI}
               predicates:
-                - Path=/api/v1/users/**
-                - Path=/api/v1/cards/**
+                - Path=/api/v1/users/**,/api/v1/cards/**
             - id: auth-service
               uri: ${AUTH_SERVICE_URI}
               predicates:
