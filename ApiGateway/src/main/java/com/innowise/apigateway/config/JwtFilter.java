@@ -18,7 +18,6 @@ import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.security.authentication.ReactiveAuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -88,12 +87,7 @@ public class JwtFilter implements GlobalFilter, ReactiveAuthenticationManager {
             Claims claims = parseClaims(token);
             String userId = claims.getSubject();
 
-            List<String> roles = claims.get("roles", List.class);
-            var authorities = roles == null
-                    ? List.<SimpleGrantedAuthority>of()
-                    : roles.stream().map(SimpleGrantedAuthority::new).toList();
-
-            return Mono.just(new UsernamePasswordAuthenticationToken(userId, token, authorities));
+            return Mono.just(new UsernamePasswordAuthenticationToken(userId, token));
         } catch (Exception e) {
             return Mono.empty();
         }
