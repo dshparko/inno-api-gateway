@@ -42,15 +42,14 @@ public class JwtFilter implements GlobalFilter, ReactiveAuthenticationManager {
 
     private final ObjectMapper objectMapper;
     private final SecretKey key;
-    private final List<String> publicPaths = List.of(
-            "/api/v1/auth/login",
-            "/api/v1/auth/register",
-            "/actuator"
-    );
+    private final List<String> publicPaths;
 
-    public JwtFilter(@Value("${jwt.secret}") String secret, ObjectMapper objectMapper) {
+    public JwtFilter(@Value("${jwt.secret}") String secret,
+                     ObjectMapper objectMapper,
+                     SecurityProperties securityProperties) {
         this.key = Keys.hmacShaKeyFor(Base64.getDecoder().decode(secret));
         this.objectMapper = objectMapper;
+        this.publicPaths = securityProperties.getPublicPaths();
     }
 
     @Override
