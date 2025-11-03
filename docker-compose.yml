@@ -1,0 +1,186 @@
+services:
+  postgres-user:
+    image: postgres:17-alpine3.22
+    container_name: user_service_db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_USER_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_user_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_USER_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  postgres-auth:
+    image: postgres:17-alpine3.22
+    container_name: auth_service_db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_AUTH_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_auth_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_AUTH_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  postgres-order:
+    image: postgres:17-alpine3.22
+    container_name: order_service_db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_ORDER_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_order_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_ORDER_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7.2
+    container_name: redis_container
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  user-service:
+    build:
+      context: inno-user-service/.
+      dockerfile: UserService/Dockerfile
+    container_name: user-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    env_file:
+      - .env
+    environment:
+
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_CACHE_TYPE: redis
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-user:5432/${POSTGRES_USER_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SERVER_PORT: 8083
+    depends_on:
+      postgres-user:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf http://localhost:8083/actuator/health | grep '\"status\":\"UP\"' || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 50s
+
+  auth-service:
+    build:
+      context: ./inno-auth-service
+      dockerfile: AuthService/Dockerfile
+    container_name: auth-service
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    env_file:
+      - .env
+    environment:
+
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-auth:5432/${POSTGRES_AUTH_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SERVER_PORT: 8084
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf http://localhost:8084/actuator/health | grep '\"status\":\"UP\"' || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 50s
+
+  order-service:
+    build:
+      context: inno-order-service/.
+      dockerfile: OrderService/Dockerfile
+    container_name: order-service
+    restart: unless-stopped
+    ports:
+      - "8085:8085"
+    env_file:
+      - .env
+    environment:
+      USER_SERVICE_URL: http://user-service:8083
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-order:5432/${POSTGRES_ORDER_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SERVER_PORT: 8085
+    depends_on:
+      postgres-order:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf http://localhost:8085/actuator/health | grep '\"status\":\"UP\"' || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 50s
+
+  api-gateway:
+    build:
+      context: ./inno-api-gateway
+      dockerfile: ApiGateway/Dockerfile
+    container_name: api-gateway
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    env_file:
+      - .env
+    environment:
+      SERVER_PORT: 8086
+
+      USER_SERVICE_URL: http://user-service:8083
+      AUTH_SERVICE_URL: http://auth-service:8084
+      ORDER_SERVICE_URL: http://order-service:8085
+
+    depends_on:
+      user-service:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
+      order-service:
+        condition: service_healthy
+
+volumes:
+  postgres_user_data:
+  postgres_auth_data:
+  postgres_order_data:
+  redis_data:
